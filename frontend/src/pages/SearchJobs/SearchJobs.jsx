@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     HiOutlineSearch,
     HiOutlineAdjustments,
@@ -35,7 +35,29 @@ export default function SearchJobs() {
         activeWorkflows
     } = useApp();
     const [showFilters, setShowFilters] = useState(true);
+    const [visibleCount, setVisibleCount] = useState(20);
     const hasFetched = useRef(false);
+
+    // Optimized Lookups (O(1) instead of O(N))
+    const applicationMap = useMemo(() => {
+        const map = new Map();
+        applications.forEach(app => {
+            const key = `${(app.jobTitle || '').toLowerCase()}-${(app.company || '').toLowerCase()}`;
+            map.set(app.id, true);
+            map.set(key, true);
+        });
+        return map;
+    }, [applications]);
+
+    const workflowMap = useMemo(() => {
+        const map = new Map();
+        activeWorkflows.forEach(w => {
+            const key = `${(w.jobTitle || '').toLowerCase()}-${(w.company || '').toLowerCase()}`;
+            map.set(w.id, w);
+            map.set(key, w);
+        });
+        return map;
+    }, [activeWorkflows]);
 
     // Fetch jobs when Search page mounts (only once)
     useEffect(() => {
@@ -50,11 +72,13 @@ export default function SearchJobs() {
     };
 
     const getWorkflow = (job) => {
-        return activeWorkflows.find(w => w.id === job.id || (w.jobTitle === job.title && w.company === job.company.name));
+        const key = `${(job.title || '').toLowerCase()}-${(job.company.name || '').toLowerCase()}`;
+        return workflowMap.get(job.id) || workflowMap.get(key);
     };
 
     const isApplied = (job) => {
-        return applications.some(a => a.id === job.id || (a.jobTitle === job.title && a.company === job.company.name));
+        const key = `${(job.title || '').toLowerCase()}-${(job.company.name || '').toLowerCase()}`;
+        return applicationMap.has(job.id) || applicationMap.has(key);
     };
 
     const handleRefresh = () => {
@@ -92,7 +116,10 @@ export default function SearchJobs() {
                         className="search-input"
                         placeholder="Search by title, company, or skill..."
                         value={filters.search}
-                        onChange={e => updateFilters('search', e.target.value)}
+                        onChange={e => {
+                            updateFilters('search', e.target.value);
+                            setVisibleCount(20); // Reset pagination on search
+                        }}
                     />
                 </div>
                 <div className="search-actions">
@@ -178,7 +205,7 @@ export default function SearchJobs() {
             {/* Results */}
             <div className="results-header">
                 <span className="results-count">
-                    {loading ? 'Fetching live jobs...' : <>Showing <strong>{jobs.length}</strong> live jobs</>}
+                    {loading ? 'Fetching live jobs...' : <>Showing <strong>{Math.min(visibleCount, jobs.length)}</strong> of <strong>{jobs.length}</strong> live jobs</>}
                 </span>
             </div>
 
@@ -188,117 +215,130 @@ export default function SearchJobs() {
                     <span className="loading-text">Fetching live jobs from 14 platforms...</span>
                 </div>
             ) : jobs.length > 0 ? (
-                <div className="jobs-grid">
-                    {jobs.map((job, i) => {
-                        const applied = isApplied(job);
-                        const workflow = getWorkflow(job);
-                        return (
-                            <div
-                                key={job.id}
-                                className="job-card"
-                                style={{ animationDelay: `${Math.min(i * 0.03, 0.3)}s` }}
-                            >
-                                <div className="job-card-header">
-                                    <div className="job-card-logo">
-                                        {job.company.logo ? (
-                                            <img
-                                                src={`http://localhost:3001/api/proxy-image?url=${encodeURIComponent(job.company.logo)}`}
-                                                alt={job.company.name}
-                                                style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 'var(--radius-sm)' }}
-                                                onError={(e) => {
-                                                    // If proxy failed, don't try direct (it'll fail CORS anyway)
-                                                    // Just hide the image and show characters
-                                                    e.target.style.display = 'none';
-                                                    e.target.parentElement.textContent = job.company.name?.charAt(0) || '💼';
-                                                }}
-                                            />
-                                        ) : (
-                                            <span>{job.company.name?.charAt(0) || '💼'}</span>
-                                        )}
+                <>
+                    <div className="jobs-grid">
+                        {jobs.slice(0, visibleCount).map((job, i) => {
+                            const applied = isApplied(job);
+                            const workflow = getWorkflow(job);
+                            return (
+                                <div
+                                    key={job.id}
+                                    className="job-card"
+                                    style={{ animationDelay: `${Math.min(i * 0.03, 0.3)}s` }}
+                                >
+                                    <div className="job-card-header">
+                                        <div className="job-card-logo">
+                                            {job.company.logo ? (
+                                                <img
+                                                    src={`http://localhost:3001/api/proxy-image?url=${encodeURIComponent(job.company.logo)}`}
+                                                    alt={job.company.name}
+                                                    style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 'var(--radius-sm)' }}
+                                                    onError={(e) => {
+                                                        // If proxy failed, don't try direct (it'll fail CORS anyway)
+                                                        // Just hide the image and show characters
+                                                        e.target.style.display = 'none';
+                                                        e.target.parentElement.textContent = job.company.name?.charAt(0) || '💼';
+                                                    }}
+                                                />
+                                            ) : (
+                                                <span>{job.company.name?.charAt(0) || '💼'}</span>
+                                            )}
+                                        </div>
+                                        <div className="job-card-title-group">
+                                            <div className="job-card-title">{job.title}</div>
+                                            <div className="job-card-company">{job.company.name}</div>
+                                        </div>
                                     </div>
-                                    <div className="job-card-title-group">
-                                        <div className="job-card-title">{job.title}</div>
-                                        <div className="job-card-company">{job.company.name}</div>
-                                    </div>
-                                </div>
 
-                                <div className="job-card-meta">
-                                    <span className="job-card-meta-item">
-                                        <HiOutlineLocationMarker /> {job.location}
-                                    </span>
-                                    {job.salary && job.salary !== 'Not disclosed' && (
+                                    <div className="job-card-meta">
                                         <span className="job-card-meta-item">
-                                            <HiOutlineCurrencyRupee /> {job.salary}
+                                            <HiOutlineLocationMarker /> {job.location}
                                         </span>
-                                    )}
-                                    {job.experience && (
-                                        <span className="job-card-meta-item">
-                                            <HiOutlineClock /> {job.experience}
-                                        </span>
-                                    )}
-                                    {job.remote && (
-                                        <span className="job-card-meta-item">
-                                            <HiOutlineGlobe /> Remote
-                                        </span>
-                                    )}
-                                </div>
-
-                                <div className="job-card-tags">
-                                    {(job.tags || []).map(tag => (
-                                        <span key={tag} className="job-card-tag">{tag}</span>
-                                    ))}
-                                </div>
-
-                                <div className="job-card-footer">
-                                    <span className="job-card-platform">
-                                        via {job.platform} • {job.postedDate}
-                                    </span>
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                        {job.url && (
-                                            <a
-                                                href={job.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="btn-secondary"
-                                                style={{ padding: '8px 14px', fontSize: 'var(--font-size-xs)' }}
-                                                title="View on platform"
-                                            >
-                                                <HiOutlineExternalLink />
-                                            </a>
-                                        )}
-
-                                        {workflow ? (
-                                            <div className="job-card-workflow">
-                                                <div className="workflow-status">
-                                                    <span className={`status-dot ${workflow.status}`} />
-                                                    {workflow.status === 'completed' ? 'Applied!' : 'Applying...'}
-                                                </div>
-                                                <div className="workflow-progress-bg">
-                                                    <div
-                                                        className="workflow-progress-bar"
-                                                        style={{ width: `${workflow.progress}%` }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        ) : applied ? (
-                                            <span className="job-card-applied-badge">
-                                                <HiOutlineCheck style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                                                Applied
+                                        {job.salary && job.salary !== 'Not disclosed' && (
+                                            <span className="job-card-meta-item">
+                                                <HiOutlineCurrencyRupee /> {job.salary}
                                             </span>
-                                        ) : (
-                                            <button
-                                                className="job-card-apply-btn"
-                                                onClick={() => handleApply(job)}
-                                            >
-                                                Quick Apply
-                                            </button>
+                                        )}
+                                        {job.experience && (
+                                            <span className="job-card-meta-item">
+                                                <HiOutlineClock /> {job.experience}
+                                            </span>
+                                        )}
+                                        {job.remote && (
+                                            <span className="job-card-meta-item">
+                                                <HiOutlineGlobe /> Remote
+                                            </span>
                                         )}
                                     </div>
+
+                                    <div className="job-card-tags">
+                                        {(job.tags || []).map(tag => (
+                                            <span key={tag} className="job-card-tag">{tag}</span>
+                                        ))}
+                                    </div>
+
+                                    <div className="job-card-footer">
+                                        <span className="job-card-platform">
+                                            via {job.platform} • {job.postedDate}
+                                        </span>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                            {job.url && (
+                                                <a
+                                                    href={job.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="btn-secondary"
+                                                    style={{ padding: '8px 14px', fontSize: 'var(--font-size-xs)' }}
+                                                    title="View on platform"
+                                                >
+                                                    <HiOutlineExternalLink />
+                                                </a>
+                                            )}
+
+                                            {workflow ? (
+                                                <div className="job-card-workflow">
+                                                    <div className="workflow-status">
+                                                        <span className={`status-dot ${workflow.status}`} />
+                                                        {workflow.status === 'completed' ? 'Applied!' : 'Applying...'}
+                                                    </div>
+                                                    <div className="workflow-progress-bg">
+                                                        <div
+                                                            className="workflow-progress-bar"
+                                                            style={{ width: `${workflow.progress}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : applied ? (
+                                                <span className="job-card-applied-badge">
+                                                    <HiOutlineCheck style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                                                    Applied
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    className="job-card-apply-btn"
+                                                    onClick={() => handleApply(job)}
+                                                >
+                                                    Quick Apply
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                            );
+                        })}
+                    </div>
+                    {visibleCount < jobs.length && (
+                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 'var(--space-2xl)' }}>
+                            <button
+                                className="btn-primary"
+                                onClick={() => setVisibleCount(prev => prev + 20)}
+                                style={{ padding: '12px 40px' }}
+                            >
+                                Load More Jobs
+                            </button>
+                        </div>
+                    )}
+                </>
             ) : (
                 <div className="empty-state">
                     <div className="empty-state-icon">🔍</div>

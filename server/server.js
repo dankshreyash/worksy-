@@ -117,8 +117,8 @@ app.get('/api/health', (req, res) => {
 // START
 // ============================================
 app.listen(PORT, () => {
-    console.log(`\n  🚀 AutoApply API Server running at http://localhost:${PORT}`);
-    console.log(`  📡 Job sources: 19 platforms (Remotive, Himalayas, Jobicy, RemoteOK, WWR, LinkedIn, Indeed, Naukri, Wellfound, Cutshort, Instahyre, Hirist, Otta, FlexJobs, Cognizant, TCS, Infosys, HCL, Wipro)`);
+    console.log(`  🚀 Worksy API Server running at http://localhost:${PORT}`);
+    console.log(`  📡 Job sources: 20 platforms (Remotive, Himalayas, Jobicy, RemoteOK, WWR, LinkedIn, Indeed, Naukri, Wellfound, Cutshort, Instahyre, Hirist, Otta, FlexJobs, Cognizant, TCS, Infosys, HCL, Wipro, + 400 Indian IT Masters)`);
     console.log(`  🔗 Endpoints:`);
     console.log(`     GET /api/jobs       — Fetch aggregated jobs`);
     console.log(`     GET /api/jobs?search=react — Search jobs`);

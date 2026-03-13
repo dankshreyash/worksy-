@@ -1,4 +1,20 @@
 import fetch from 'node-fetch';
+import { readFile } from 'fs/promises';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const DATA_PATH = join(__dirname, '..', 'data', 'indian_it_companies.json');
+
+let indianCompanies = [];
+try {
+    const rawData = await readFile(DATA_PATH, 'utf8');
+    indianCompanies = JSON.parse(rawData);
+    console.log(`📂 Loaded ${indianCompanies.length} Indian IT companies for search.`);
+} catch (err) {
+    console.error('⚠️ Could not load Indian IT companies list:', err.message);
+}
 
 // ============================================
 // HELPERS (defined first for use by all sources)
@@ -802,6 +818,88 @@ export async function fetchWITCHLinkedInJobs(options = {}) {
 
 
 // ============================================
+// 17. INDIAN IT COMPANIES — Intelligent Search
+// ============================================
+export async function fetchIndianITJobs(options = {}) {
+    const search = (options.search || '').toLowerCase().trim();
+    if (!search) return [];
+
+    // Find companies that match the search term
+    const matchedCompanies = indianCompanies.filter(c =>
+        c.name.toLowerCase().includes(search) || search.includes(c.name.toLowerCase())
+    ).slice(0, 5); // Limit to 5 specific company searches to avoid spamming
+
+    if (matchedCompanies.length === 0) return [];
+
+    console.log(`🔍 Indian IT Match: Searching jobs for ${matchedCompanies.map(c => c.name).join(', ')}`);
+
+    const allJobs = [];
+    const results = await Promise.allSettled(
+        matchedCompanies.map(async (company) => {
+            try {
+                // Use LinkedIn scraper logic as it's the most reliable for specific company searches
+                const params = new URLSearchParams({
+                    keywords: company.name,
+                    location: 'India',
+                    start: '0',
+                    sortBy: 'DD',
+                });
+                const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?${params}`;
+                const res = await safeFetch(url, { headers: { ...HEADERS, 'Accept': 'text/html' } });
+                if (!res.ok) return [];
+                const html = await res.text();
+
+                const jobs = [];
+                const cardRegex = /<li[^>]*>([\s\S]*?)<\/li>/g;
+                const titleRegex = /<h3[^>]*base-search-card__title[^>]*>([\s\S]*?)<\/h3>/;
+                const companyRegex = /<h4[^>]*base-search-card__subtitle[^>]*>([\s\S]*?)<\/h4>/;
+                const locationRegex = /<span[^>]*job-search-card__location[^>]*>([\s\S]*?)<\/span>/;
+                const linkRegex = /<a[^>]*href="([^"]*)"[^>]*>/;
+                const dateRegex = /<time[^>]*datetime="([^"]*)"[^>]*>/;
+
+                let card;
+                while ((card = cardRegex.exec(html)) !== null && jobs.length < 10) {
+                    const c = card[0];
+                    const title = titleRegex.exec(c);
+                    const comp = companyRegex.exec(c);
+                    const location = locationRegex.exec(c);
+                    const link = linkRegex.exec(c);
+                    const date = dateRegex.exec(c);
+
+                    if (title) {
+                        jobs.push({
+                            id: `india-it-${company.name.toLowerCase().replace(/\s/g, '')}-${jobs.length}-${Date.now()}`,
+                            title: stripHtml(title[1]),
+                            company: { name: stripHtml(comp?.[1] || company.name), logo: `https://logo.clearbit.com/${company.name.toLowerCase().replace(/\s/g, '')}.com` },
+                            location: stripHtml(location?.[1] || 'India'),
+                            salary: 'Not disclosed',
+                            type: 'Full-time',
+                            remote: stripHtml(location?.[1] || '').toLowerCase().includes('remote'),
+                            experience: '',
+                            platform: 'Indian IT Direct',
+                            tags: [company.name, 'Indian IT', 'Master List'],
+                            postedDate: formatDate(date?.[1]),
+                            description: `${stripHtml(title[1])} at ${company.name}`,
+                            url: link?.[1]?.split('?')[0] || 'https://linkedin.com/jobs',
+                        });
+                    }
+                }
+                return jobs;
+            } catch (err) {
+                console.error(`❌ ${company.name} Search:`, err.message);
+                return [];
+            }
+        })
+    );
+
+    for (const r of results) {
+        if (r.status === 'fulfilled') allJobs.push(...r.value);
+    }
+    return allJobs;
+}
+
+
+// ============================================
 // AGGREGATOR — Fetch ALL sources + merge + cache
 // ============================================
 
@@ -836,6 +934,7 @@ export async function fetchAllJobs(options = {}) {
         fetchFlexJobs(options),
         fetchCognizantJobs(options),
         fetchWITCHLinkedInJobs(options),
+        fetchIndianITJobs(options),
     ]);
 
     const sourceNames = [
@@ -843,6 +942,7 @@ export async function fetchAllJobs(options = {}) {
         'LinkedIn', 'Indeed', 'Naukri', 'Wellfound', 'Cutshort',
         'Instahyre', 'Hirist', 'Otta', 'FlexJobs',
         'Cognizant', 'WITCH (TCS/Infosys/HCL/Wipro)',
+        'Indian IT Companies (400+ List)',
     ];
 
     const allJobs = [];
@@ -894,8 +994,8 @@ export function getSourceStats() {
             'Remotive', 'Himalayas', 'Jobicy', 'Remote OK', 'We Work Remotely',
             'LinkedIn', 'Indeed', 'Naukri', 'Wellfound', 'Cutshort',
             'Instahyre', 'Hirist', 'Otta', 'FlexJobs',
-            'Cognizant', 'TCS', 'Infosys', 'HCL', 'Wipro',
+            'Cognizant', 'TCS', 'Infosys', 'HCL', 'Wipro', '400+ Indian IT Companies',
         ],
-        description: 'Aggregating jobs from 19 platforms — including WITCH companies (TCS, Infosys, HCL, Wipro, Cognizant)',
+        description: 'Aggregating jobs from 20 platforms — including WITCH and 400+ Indian IT Companies from master list',
     };
 }
