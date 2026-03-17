@@ -9,6 +9,9 @@ import {
     HiOutlineCheck,
     HiOutlineExternalLink,
     HiOutlineRefresh,
+    HiOutlineUpload,
+    HiOutlineDocumentText,
+    HiX
 } from 'react-icons/hi';
 import { useApp } from '../../context/AppContext';
 import './SearchJobs.css';
@@ -32,7 +35,11 @@ export default function SearchJobs() {
         error,
         fetchJobs,
         jobSources,
-        activeWorkflows
+        activeWorkflows,
+        proMode,
+        parseResume,
+        parsingResume,
+        resumeKeywords,
     } = useApp();
     const [showFilters, setShowFilters] = useState(true);
     const [visibleCount, setVisibleCount] = useState(20);
@@ -85,6 +92,16 @@ export default function SearchJobs() {
         fetchJobs(filters.search || '');
     };
 
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.type !== 'application/pdf') {
+            alert('Please upload a PDF resume.');
+            return;
+        }
+        await parseResume(file);
+    };
+
     return (
         <div className="search-page">
             <div className="page-header">
@@ -104,6 +121,51 @@ export default function SearchJobs() {
                     <button className="btn-secondary" onClick={handleRefresh} style={{ marginLeft: 'auto' }}>
                         Retry
                     </button>
+                </div>
+            )}
+
+            {/* PRO MODE: Resume Upload */}
+            {proMode && (
+                <div className="pro-resume-section">
+                    <div className="pro-resume-header">
+                        <div className="pro-resume-title">
+                            <HiOutlineDocumentText className="pro-icon" />
+                            <h3>Auto-Parse Keywords</h3>
+                        </div>
+                        <p>Upload your resume (PDF) to automatically extract skills and filter live jobs. We never store your file.</p>
+                    </div>
+
+                    <div className="pro-resume-content">
+                        {resumeKeywords.length > 0 ? (
+                            <div className="parsed-keywords-container">
+                                <span>Found Skills:</span>
+                                <div className="parsed-keywords">
+                                    {resumeKeywords.map(kw => (
+                                        <span key={kw} className="keyword-badge">{kw}</span>
+                                    ))}
+                                </div>
+                                <label className="btn-secondary resume-reupload-btn">
+                                    <HiOutlineUpload /> Re-upload
+                                    <input type="file" accept="application/pdf" onChange={handleFileUpload} style={{ display: 'none' }} />
+                                </label>
+                            </div>
+                        ) : (
+                            <label className={`resume-upload-zone ${parsingResume ? 'parsing' : ''}`}>
+                                <input type="file" accept="application/pdf" onChange={handleFileUpload} disabled={parsingResume} style={{ display: 'none' }} />
+                                {parsingResume ? (
+                                    <>
+                                        <div className="loading-spinner" style={{ width: 24, height: 24 }} />
+                                        <span>Reading your resume...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <HiOutlineUpload className="upload-icon" />
+                                        <span>Click to upload PDF resume</span>
+                                    </>
+                                )}
+                            </label>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -213,6 +275,12 @@ export default function SearchJobs() {
                 <div className="loading-container">
                     <div className="loading-spinner" />
                     <span className="loading-text">Fetching live jobs from 14 platforms...</span>
+                </div>
+            ) : proMode && resumeKeywords.length === 0 ? (
+                <div className="empty-state">
+                    <div className="empty-state-icon">📄</div>
+                    <h3>Upload your resume to see matched jobs</h3>
+                    <p>Pro Mode is active. We are waiting for you to upload a PDF resume so we can automatically find the perfect jobs for your skills.</p>
                 </div>
             ) : jobs.length > 0 ? (
                 <>

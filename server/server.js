@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
+import multer from 'multer';
+import { PDFParse } from 'pdf-parse';
 import { fetchAllJobs, getSourceStats } from './services/jobService.js';
 
 const app = express();
@@ -9,6 +11,8 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 // ============================================
 // ROUTES
@@ -68,6 +72,61 @@ app.post('/api/apply', async (req, res) => {
     } catch (err) {
         console.error('Error in /api/apply:', err);
         res.status(500).json({ success: false, error: 'Failed to trigger automation' });
+    }
+});
+
+// POST /api/parse-resume — Pro Feature: Parse resume for keywords
+app.post('/api/parse-resume', upload.single('resume'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No resume file provided' });
+        }
+
+        console.log(`[${new Date().toISOString()}] POST /api/parse-resume — Extracting keywords`);
+        
+        const parser = new PDFParse({ data: req.file.buffer });
+        const result = await parser.getText();
+        await parser.destroy();
+
+        const text = result.text.toLowerCase();
+
+        // Common tech keywords to look for
+        const techKeywords = [
+            'react', 'node.js', 'node', 'python', 'java', 'aws', 'docker', 'kubernetes',
+            'typescript', 'javascript', 'vue', 'angular', 'sql', 'mongodb', 'express',
+            'django', 'flask', 'spring', 'go', 'rust', 'c++', 'c#', 'php', 'ruby',
+            'html', 'css', 'tailwind', 'linux', 'git', 'ci/cd', 'agile', 'scrum',
+            'redis', 'graphql', 'rest', 'api', 'machine learning', 'data science',
+            'frontend', 'backend', 'full stack', 'devops', 'cloud', 'azure', 'gcp',
+            'next.js', 'nest.js', 'graphql', 'postgres', 'mysql', 'docker', 'k8s'
+        ];
+
+        // Ensure we match whole words and escape special regex characters like +, *, ?, .
+        const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        const foundKeywords = techKeywords.filter(kw => {
+            try {
+                const regex = new RegExp(`\\b${escapeRegExp(kw)}\\b`, 'i');
+                return regex.test(text);
+            } catch (e) {
+                console.error(`Regex error for keyword "${kw}":`, e);
+                return false;
+            }
+        });
+
+        // Deduplicate and filter out 'node' if 'node.js' is already there to avoid redundancy
+        let finalKeywords = [...new Set(foundKeywords)];
+        if (finalKeywords.includes('node.js') && finalKeywords.includes('node')) {
+            finalKeywords = finalKeywords.filter(k => k !== 'node');
+        }
+
+        res.json({
+            success: true,
+            keywords: finalKeywords
+        });
+    } catch (err) {
+        console.error('Error parsing resume:', err.stack || err);
+        res.status(500).json({ success: false, error: 'Failed to parse resume: ' + err.message });
     }
 });
 

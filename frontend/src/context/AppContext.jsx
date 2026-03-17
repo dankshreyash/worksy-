@@ -12,6 +12,11 @@ export function AppProvider({ children }) {
     const [error, setError] = useState(null);
     const [jobSources, setJobSources] = useState([]);
 
+    // Pro Mode Features
+    const [proMode, setProMode] = useState(false);
+    const [resumeKeywords, setResumeKeywords] = useState([]);
+    const [parsingResume, setParsingResume] = useState(false);
+
     // Active Workflows (Running bots)
     const [activeWorkflows, setActiveWorkflows] = useState([]);
 
@@ -43,6 +48,46 @@ export function AppProvider({ children }) {
 
     const toggleTheme = useCallback(() => {
         setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+    }, []);
+
+    const toggleProMode = useCallback(() => {
+        setProMode(prev => {
+            const next = !prev;
+            if (!next) {
+                // Clear keywords when exiting Pro mode
+                setResumeKeywords([]);
+            }
+            return next;
+        });
+    }, []);
+
+    const parseResume = useCallback(async (file) => {
+        setParsingResume(true);
+        setError(null);
+        try {
+            const formData = new FormData();
+            formData.append('resume', file);
+
+            const res = await fetch(`${API_BASE}/parse-resume`, {
+                method: 'POST',
+                body: formData,
+            });
+            if (!res.ok) throw new Error(`API error ${res.status}`);
+            const data = await res.json();
+
+            if (data.success) {
+                setResumeKeywords(data.keywords);
+                return data.keywords;
+            } else {
+                throw new Error(data.error || 'Failed to parse resume');
+            }
+        } catch (err) {
+            console.error('Failed to parse resume:', err);
+            setError(err.message);
+            return null;
+        } finally {
+            setParsingResume(false);
+        }
     }, []);
 
     // Fetch live jobs from backend
@@ -84,6 +129,13 @@ export function AppProvider({ children }) {
 
     // Apply local filters to fetched jobs
     const filteredJobs = allJobs.filter(job => {
+        // Pro Mode Keyword Filtering
+        if (proMode && resumeKeywords.length > 0) {
+            const searchStr = `${job.title} ${job.company.name} ${(job.tags || []).join(' ')}`.toLowerCase();
+            const matchesProKeyword = resumeKeywords.some(kw => searchStr.includes(kw));
+            if (!matchesProKeyword) return false;
+        }
+
         if (filters.search) {
             const q = filters.search.toLowerCase();
             const match = job.title.toLowerCase().includes(q) ||
@@ -200,11 +252,16 @@ export function AppProvider({ children }) {
             jobSources,
             theme,
             activeWorkflows,
+            proMode,
+            resumeKeywords,
+            parsingResume,
             toggleTheme,
+            toggleProMode,
             fetchJobs,
             applyToJob,
             updateFilters,
             resetFilters,
+            parseResume,
         }}>
             {children}
         </AppContext.Provider>
