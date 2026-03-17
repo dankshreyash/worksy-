@@ -264,26 +264,29 @@
 .job-card-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: var(--space-md);
     flex: 1;
+    align-items: flex-start;
 }
 
 .job-card-tag {
     display: inline-flex;
     align-items: center;
-    font-size: var(--font-size-xs);
+    font-size: 0.7rem;
     font-weight: 500;
-    padding: 4px 12px;
-    border-radius: var(--radius-full);
-    background: var(--accent-gradient-subtle);
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
     color: var(--text-accent);
     white-space: nowrap;
     transition: all var(--transition-fast);
 }
 
 .job-card-tag:hover {
-    background: rgba(99, 102, 241, 0.2);
+    background: var(--bg-glass-hover);
+    border-color: var(--text-accent);
     transform: translateY(-1px);
 }
 
