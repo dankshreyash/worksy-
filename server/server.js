@@ -169,7 +169,11 @@ app.get('/api/proxy-image', async (req, res) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({ 
+        status: 'ok', 
+        version: '1.0.1-pro',
+        timestamp: new Date().toISOString() 
+    });
 });
 
 // ============================================
