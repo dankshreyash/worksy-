@@ -265,11 +265,13 @@ export default function SearchJobs() {
             )}
 
             {/* Results */}
-            <div className="results-header">
-                <span className="results-count">
-                    {loading ? 'Fetching live jobs...' : <>Showing <strong>{Math.min(visibleCount, jobs.length)}</strong> of <strong>{jobs.length}</strong> live jobs</>}
-                </span>
-            </div>
+            {!(proMode && resumeKeywords.length === 0) && (
+                <div className="results-header">
+                    <span className="results-count">
+                        {loading ? 'Fetching live jobs...' : <>Showing <strong>{Math.min(visibleCount, jobs.length)}</strong> of <strong>{jobs.length}</strong> live jobs</>}
+                    </span>
+                </div>
+            )}
 
             {loading ? (
                 <div className="loading-container">
